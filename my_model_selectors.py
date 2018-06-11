@@ -77,7 +77,28 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        best_bic_score = float("inf")
+        best_n = self.n_constant
+
+        # loop through all possible n_components and find the best
+        for n in range(self.min_n_components, self.max_n_components + 1):
+            # check the count of training
+            try:
+                hmm_model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                logL = hmm_model.score(X, lengths)
+
+                num_of_parameters = n ** 2 + 2 * n * len(self.X) - 1
+                bic = -2 * logL + len(self.lengths) * math.log(len(self.X))
+
+                if bic < best_bic_score:
+                    best_bic_score = bic
+                    best_n = n
+            except:
+                pass
+
+        print("{0} best_n: {1}".format(self.this_word, best_n))
+        return self.base_model(best_n)
 
 
 class SelectorDIC(ModelSelector):
@@ -94,7 +115,36 @@ class SelectorDIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        best_dic_score = float("-inf")
+        best_n = self.n_constant
+
+        competing_words = [key for key in self.words.keys() if key != self.this_word]
+        M = len(self.hwords)
+
+        # loop through all possible n_components and find the best
+        for n in range(self.min_n_components, self.max_n_components + 1):
+            # check the count of training
+            try:
+                hmm_model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                logL = hmm_model.score(X, lengths)
+
+                sum_competing_logL = 0
+                # get the score for the rest of the words
+                for word in competing_words:
+                    X, lengths = self.hwords[word]
+                    sum_competing_logL += hmm_model.score(X, lengths)
+
+                dic = logL - (1 / M - 1) * sum_competing_logL
+
+                if dic > best_dic_score:
+                    best_dic_score = dic
+                    best_n = n
+            except:
+                pass
+
+        print("{0} best_n: {1}".format(self.this_word, best_n))
+        return self.base_model(best_n)
 
 
 class SelectorCV(ModelSelector):
@@ -106,4 +156,39 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
-        raise NotImplementedError
+        best_average_logL = float("-inf")
+        best_n = self.n_constant
+
+        if (len(self.sequences) <= 3):
+            split_method = KFold(n_splits=len(self.sequences))
+        else:
+            # by default the nn_splits = 3
+            split_method = KFold()
+
+        # loop through all possible n_components and find the best
+        for n in range(self.min_n_components, self.max_n_components + 1):
+            total_logL = 0
+            # check the count of training
+            count = 0            
+            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                # print("Train fold indices:{} Test fold indices:{}".format(cv_train_idx, cv_test_idx))  # view indices of the folds
+            
+                X_train, lengths_train = combine_sequences(cv_train_idx, self.sequences)
+                X_test, lengths_test = combine_sequences(cv_test_idx, self.sequences) 
+
+                try:
+                    hmm_model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                            random_state=self.random_state, verbose=False).fit(X_train, lengths_train)
+                    logL = hmm_model.score(X_test, lengths_test)
+                    total_logL += LogL
+                    count += 1
+                except:
+                    pass
+
+
+            if count > 0 and total_logL/count > best_average_logL:
+                best_average_logL = total_logL/count
+                best_n = n
+
+        print("{0} best_n: {1}".format(self.this_word, best_n))
+        return self.base_model(best_n)
