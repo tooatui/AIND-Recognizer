@@ -87,10 +87,12 @@ class SelectorBIC(ModelSelector):
             try:
                 hmm_model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
                                         random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
-                logL = hmm_model.score(X, lengths)
+                logL = hmm_model.score(self.X, self.lengths)
 
-                num_of_parameters = n ** 2 + 2 * n * len(self.X) - 1
-                bic = -2 * logL + len(self.lengths) * math.log(len(self.X))
+                N, f = self.X.shape
+                p = n ** 2 + 2 * n * f - 1
+
+                bic = -2 * logL + p * math.log(N)
 
                 if bic < best_bic_score:
                     best_bic_score = bic
@@ -129,7 +131,7 @@ class SelectorDIC(ModelSelector):
             try:
                 hmm_model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
                                         random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
-                logL = hmm_model.score(X, lengths)
+                logL = hmm_model.score(self.X, self.lengths)
 
                 sum_competing_logL = 0
                 # get the score for the rest of the words
